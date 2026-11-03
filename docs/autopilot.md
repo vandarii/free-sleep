@@ -49,8 +49,14 @@ While Autopilot is enabled for a side, that side's power and temperature schedul
 
 ## Installing this fork
 
-The install and update scripts download from `vandarii/free-sleep`. To install a branch other than `main`, set `FREE_SLEEP_BRANCH`:
+The install and update scripts download from `vandarii/free-sleep`. To install a branch other than `main`, set `FREE_SLEEP_BRANCH`.
+
+Free Sleep blocks the Pod's internet access, so `curl` hangs unless you lift the block first. Over SSH on the Pod:
 
 ```bash
+sh /home/dac/free-sleep/scripts/unblock_internet_access.sh
 curl -fsSL https://raw.githubusercontent.com/vandarii/free-sleep/autopilot/scripts/install.sh | sudo FREE_SLEEP_BRANCH=autopilot bash
+sh /home/dac/free-sleep/scripts/block_internet_access.sh
 ```
+
+The installer backs up the database to `/persistent/free-sleep-data/free-sleep-copy.db` before running migrations. The in-app and Home Assistant *Update* buttons handle the internet block themselves, but they install `main`.
