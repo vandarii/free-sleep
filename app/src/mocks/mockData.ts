@@ -8,6 +8,7 @@ import type { SleepRecord } from '@api/sleepSchema.ts';
 import type { VitalsRecord } from '@api/vitals.ts';
 import type { ServerStatus } from '@api/serverStatusSchema.ts';
 import type { Jobs } from '@api/jobs.ts';
+import { createAutopilotSettings } from './autopilotMock';
 
 type Side = 'left' | 'right';
 
@@ -223,7 +224,8 @@ const createSettings = (): Settings => ({
         snoozeDuration: 60,
         inactiveAlarmBehavior: 'power',
       },
-    }
+    },
+    autopilot: createAutopilotSettings(),
   },
   right: {
     name: 'Right side',
@@ -249,7 +251,8 @@ const createSettings = (): Settings => ({
         snoozeDuration: 60,
         inactiveAlarmBehavior: 'power',
       },
-    }
+    },
+    autopilot: createAutopilotSettings(),
   },
   primePodDaily: { enabled: true, time: '14:30' },
 });

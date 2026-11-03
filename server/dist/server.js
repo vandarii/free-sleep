@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="29364e05-57b8-52f6-89dd-72009ad15e54")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="7bddb952-0deb-5e52-a4ca-830f655259fd")}catch(e){}}();
 import './instrument.js';
 import express from 'express';
 import schedule from 'node-schedule';
@@ -15,6 +15,7 @@ import serverStatus from './serverStatus.js';
 import { prisma } from './db/prisma.js';
 import { setupSentryTags } from './setupSentryTags.js';
 import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
+import { startAutopilot, stopAutopilot } from './autopilot/controller.js';
 const port = 3000;
 const app = express();
 let server;
@@ -56,6 +57,7 @@ async function gracefulShutdown(signal) {
     }, 15_000);
     logger.debug('Stopping node-schedule');
     await schedule.gracefulShutdown();
+    stopAutopilot();
     await disconnectPrisma();
     try {
         if (server) {
@@ -119,6 +121,7 @@ async function startServer() {
     }
     void loadWifiSignalStrength();
     setInterval(loadWifiSignalStrength, 10_000);
+    startAutopilot();
     // Register signal handlers for graceful shutdown
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
@@ -139,4 +142,4 @@ startServer().catch((err) => {
     process.exit(1);
 });
 //# sourceMappingURL=server.js.map
-//# debugId=29364e05-57b8-52f6-89dd-72009ad15e54
+//# debugId=7bddb952-0deb-5e52-a4ca-830f655259fd

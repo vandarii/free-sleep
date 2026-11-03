@@ -1,6 +1,6 @@
 import _ from 'lodash';
 import { useEffect } from 'react';
-import { Box } from '@mui/material';
+import { Alert, Box } from '@mui/material';
 import { DeepPartial } from 'ts-essentials';
 import moment from 'moment-timezone';
 
@@ -107,6 +107,11 @@ export default function SchedulePage() {
     >
       <PageHeader title="Schedules"/>
       <SideControl/>
+      { settings?.[side]?.autopilot?.enabled && (
+        <Alert severity="info">
+          Autopilot is on for this side, so its power and temperature schedules are paused. Alarms still run.
+        </Alert>
+      ) }
 
       <DayTabs/>
       <ErrorBoundary componentName='Scheduling chart'>

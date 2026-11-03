@@ -1,10 +1,11 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="6dcd1266-33cc-5dfb-ad5f-e36b224a551c")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="35f971de-bb9e-5f8d-92fe-742bdcb37921")}catch(e){}}();
 import express from 'express';
 import moment from 'moment-timezone';
 import { z } from 'zod';
 import logger from '../../logger.js';
 import settingsDB from '../../db/settings.js';
+import { recordPresence } from '../../autopilot/presenceTracker.js';
 const router = express.Router();
 const PresenceSideSchema = z.object({
     present: z.boolean(),
@@ -55,11 +56,13 @@ router.post('/presence', async (req, res) => {
         if (body.left) {
             presenceData.left.present = body.left.present;
             presenceData.left.lastUpdatedAt = currentTime;
+            recordPresence('left', body.left.present);
         }
         // Update right side if provided
         if (body.right) {
             presenceData.right.present = body.right.present;
             presenceData.right.lastUpdatedAt = currentTime;
+            recordPresence('right', body.right.present);
         }
         return res.status(200).json(presenceData);
     }
@@ -79,4 +82,4 @@ router.get('/presence', (req, res) => {
 });
 export default router;
 //# sourceMappingURL=presence.js.map
-//# debugId=6dcd1266-33cc-5dfb-ad5f-e36b224a551c
+//# debugId=35f971de-bb9e-5f8d-92fe-742bdcb37921

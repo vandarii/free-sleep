@@ -9,6 +9,7 @@ import { Gesture, GestureSchema } from '../db/settingsSchema.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { DeepPartial } from 'ts-essentials';
 import serverStatus from '../serverStatus.js';
+import { toggleSession } from '../autopilot/sessionManager.js';
 
 
 
@@ -54,6 +55,13 @@ export class FrankenMonitor {
       }
       logger.debug(`Processing gesture temperature change for ${side}. ${currentTemperatureTarget} -> ${newTemperatureTargetF}`);
       return await updateDeviceStatus({ [side]: { targetTemperatureF: newTemperatureTargetF } } as DeepPartial<DeviceStatus>);
+    } else if (behavior.type === 'sleepSession') {
+      logger.debug(`Processing gesture sleep session toggle for ${side}`);
+      try {
+        await toggleSession(side, 'tap');
+      } catch (error) {
+        logger.warn(`Could not toggle sleep session: ${error instanceof Error ? error.message : String(error)}`);
+      }
     } else if (behavior.type) {
       // TODO: Add alarm handling
       logger.warn('Skipping gesture...');

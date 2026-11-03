@@ -22,6 +22,13 @@ import {
   getLogFiles,
   handleJobs,
 } from './mockData';
+import {
+  endAutopilotSession,
+  getAutopilotSessionDetail,
+  getAutopilotStatus,
+  listAutopilotSessions,
+  startAutopilotSession,
+} from './autopilotMock';
 
 type Side = 'left' | 'right';
 
@@ -74,6 +81,30 @@ export const handlers = [
     const updated = updateSettings(body);
     await delay(120);
     return HttpResponse.json(deepClone(updated));
+  }),
+  http.get('/api/autopilot/status', async () => {
+    await delay(120);
+    return HttpResponse.json(deepClone(getAutopilotStatus(getSettings())));
+  }),
+  http.get('/api/autopilot/sessions', async ({ request }) => {
+    await delay(120);
+    return HttpResponse.json(deepClone(listAutopilotSessions(toFilters(request).side)));
+  }),
+  http.get('/api/autopilot/sessions/:id', async ({ params }) => {
+    await delay(120);
+    const detail = getAutopilotSessionDetail(Number(params.id));
+    return detail ? HttpResponse.json(deepClone(detail)) : notFound('Session not found');
+  }),
+  http.post('/api/autopilot/session/start', async ({ request }) => {
+    const body = (await request.json()) as { side: Side; nap?: boolean; wakeAt?: number };
+    await delay(120);
+    return HttpResponse.json(deepClone(startAutopilotSession(body.side, getSettings()[body.side].autopilot, body.nap, body.wakeAt)));
+  }),
+  http.post('/api/autopilot/session/end', async ({ request }) => {
+    const body = (await request.json()) as { side: Side };
+    await delay(120);
+    const session = endAutopilotSession(body.side);
+    return session ? HttpResponse.json(deepClone(session)) : HttpResponse.json({ error: 'No session is running' }, { status: 409 });
   }),
   http.get('/api/deviceStatus', async () => {
     await delay(120);

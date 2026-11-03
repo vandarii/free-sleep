@@ -4,7 +4,10 @@ set -euo pipefail
 
 # --------------------------------------------------------------------------------
 # Variables
-REPO_URL="https://github.com/throwaway31265/free-sleep/archive/refs/heads/main.zip"
+# Installs from the Autopilot fork. Set FREE_SLEEP_BRANCH to install another branch (e.g. autopilot)
+REPO_OWNER="vandarii"
+BRANCH="${FREE_SLEEP_BRANCH:-main}"
+REPO_URL="https://github.com/$REPO_OWNER/free-sleep/archive/refs/heads/$BRANCH.zip"
 ZIP_FILE="free-sleep.zip"
 REPO_DIR="/home/dac/free-sleep"
 SERVER_DIR="$REPO_DIR/server"
@@ -39,7 +42,8 @@ rm -f "$ZIP_FILE"
 # Clean up existing directory and move new code into place
 echo "Setting up the installation directory..."
 rm -rf "$REPO_DIR"
-mv free-sleep-main "$REPO_DIR"
+# GitHub names the folder after the branch, with "/" replaced by "-"
+mv "free-sleep-${BRANCH//\//-}" "$REPO_DIR"
 
 
 chown -R "$USERNAME":"$USERNAME" "$REPO_DIR"

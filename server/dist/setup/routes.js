@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="06b3c546-1950-5ca6-86b4-d42c407fcde2")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="eb5e829a-9f31-53a3-8589-fabea4de3be2")}catch(e){}}();
 import * as Sentry from '@sentry/node';
 import express from 'express';
 import path from 'path';
@@ -17,6 +17,7 @@ import vitals from '../routes/metrics/vitals.js';
 import presence from '../routes/metrics/presence.js';
 import logs from '../routes/logs/logs.js';
 import serverStatus from '../routes/serverStatus/serverStatus.js';
+import autopilot from '../routes/autopilot/autopilot.js';
 import logger from '../logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,6 +30,7 @@ export default function (app) {
     app.use('/api/', jobs);
     app.use('/api/', settings);
     app.use('/api/', services);
+    app.use('/api/', autopilot);
     app.use('/api/metrics/', movement);
     app.use('/api/metrics/', sleep);
     app.use('/api/metrics/', vitals);
@@ -67,4 +69,4 @@ export default function (app) {
     logger.debug('Registered routes!');
 }
 //# sourceMappingURL=routes.js.map
-//# debugId=06b3c546-1950-5ca6-86b4-d42c407fcde2
+//# debugId=eb5e829a-9f31-53a3-8589-fabea4de3be2

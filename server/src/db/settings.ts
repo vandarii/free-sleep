@@ -37,7 +37,29 @@ const defaultSideSettings: SideSettings = {
       snoozeDuration: 60,
       inactiveAlarmBehavior: 'power',
     },
-  }
+  },
+  autopilot: {
+    enabled: false,
+    dryRun: true,
+    baseTemperatureF: 68,
+    stageOffsetsF: {
+      falling: -2,
+      deep: -5,
+      rem: -2,
+      wake: 4,
+    },
+    napTemperatureF: 66,
+    maxAdjustmentF: 4,
+    minMinutesBetweenChanges: 20,
+    autoEndAbsentMinutes: 60,
+    maxSessionHours: 14,
+    napMaxMinutes: 90,
+    roomCompensation: {
+      enabled: true,
+      referenceC: 22,
+      calibrationOffsetC: 0,
+    },
+  },
 };
 
 const defaultData: Settings = {

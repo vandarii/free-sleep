@@ -24,6 +24,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import LogsPage from './pages/DataPage/LogsPage/LogsPage.tsx';
 import StatusPage from './pages/StatusPage/StatusPage.tsx';
+import AutopilotPage from './pages/AutopilotPage/AutopilotPage.tsx';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -69,6 +70,7 @@ const App = () => {
 
                   <Route path="settings" element={ <SettingsPage/> }/>
                   <Route path="schedules" element={ <SchedulePage/> }/>
+                  <Route path="autopilot" element={ <AutopilotPage/> }/>
                 </Route>
               </SentryRoutes>
             </BrowserRouter>

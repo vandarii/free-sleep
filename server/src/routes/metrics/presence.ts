@@ -3,6 +3,7 @@ import moment from 'moment-timezone';
 import { z } from 'zod';
 import logger from '../../logger.js';
 import settingsDB from '../../db/settings.js';
+import { recordPresence } from '../../autopilot/presenceTracker.js';
 
 const router: Router = express.Router();
 
@@ -68,12 +69,14 @@ router.post('/presence', async (req: Request, res: Response) => {
     if (body.left) {
       presenceData.left.present = body.left.present;
       presenceData.left.lastUpdatedAt = currentTime;
+      recordPresence('left', body.left.present);
     }
 
     // Update right side if provided
     if (body.right) {
       presenceData.right.present = body.right.present;
       presenceData.right.lastUpdatedAt = currentTime;
+      recordPresence('right', body.right.present);
     }
 
     return res.status(200).json(presenceData);

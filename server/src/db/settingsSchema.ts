@@ -19,10 +19,49 @@ const AlarmTapConfig = z.object({
   inactiveAlarmBehavior: z.enum(['power', 'none'])
 });
 
+// Starts a sleep session when none is active, otherwise ends it (Autopilot)
+const SleepSessionTapConfig = z.object({
+  type: z.literal('sleepSession'),
+});
+
 export const TapConfig = z.discriminatedUnion('type', [
   TemperatureTapConfig,
   AlarmTapConfig,
+  SleepSessionTapConfig,
 ]);
+
+export const AUTOPILOT_STAGES = ['falling', 'deep', 'rem', 'wake'] as const;
+export const AutopilotStageSchema = z.enum(AUTOPILOT_STAGES);
+
+const StageOffset = z.number().min(-20).max(20);
+
+const AutopilotSideSettingsSchema = z.object({
+  enabled: z.boolean(),
+  // Log decisions without changing the temperature
+  dryRun: z.boolean(),
+  baseTemperatureF: z.number().min(55).max(110),
+  // Offsets are relative to baseTemperatureF
+  stageOffsetsF: z.object({
+    falling: StageOffset,
+    deep: StageOffset,
+    rem: StageOffset,
+    wake: StageOffset,
+  }),
+  napTemperatureF: z.number().min(55).max(110),
+  // Live adjustments never move further than this from the stage target
+  maxAdjustmentF: z.number().min(0).max(10),
+  minMinutesBetweenChanges: z.number().min(5).max(120),
+  // Continuous absence that ends a session, backdated to when the absence began
+  autoEndAbsentMinutes: z.number().min(10).max(240),
+  maxSessionHours: z.number().min(2).max(24),
+  // Sessions shorter than this are classified as naps when they end
+  napMaxMinutes: z.number().min(0).max(240),
+  roomCompensation: z.object({
+    enabled: z.boolean(),
+    referenceC: z.number().min(10).max(35),
+    calibrationOffsetC: z.number().min(-10).max(10),
+  }),
+});
 
 export const GestureSchema = z.enum(['doubleTap', 'tripleTap', 'quadTap']);
 
@@ -44,7 +83,8 @@ const SideSettingsSchema = z.object({
     doubleTap: TapConfig,
     tripleTap: TapConfig,
     quadTap: TapConfig,
-  })
+  }),
+  autopilot: AutopilotSideSettingsSchema,
 }).strict();
 
 export const SettingsSchema = z.object({
@@ -61,5 +101,7 @@ export const SettingsSchema = z.object({
 }).strict();
 
 export type SideSettings = z.infer<typeof SideSettingsSchema>;
+export type AutopilotSideSettings = z.infer<typeof AutopilotSideSettingsSchema>;
+export type AutopilotStage = z.infer<typeof AutopilotStageSchema>;
 export type Settings = z.infer<typeof SettingsSchema>;
 export type Gesture = z.infer<typeof GestureSchema>

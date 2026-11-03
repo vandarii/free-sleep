@@ -4,12 +4,14 @@ import ThermostatOutlinedIcon from '@mui/icons-material/ThermostatOutlined';
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import GraphicEqOutlinedIcon from '@mui/icons-material/GraphicEqOutlined';
+import BedtimeOutlinedIcon from '@mui/icons-material/BedtimeOutlined';
 
 type Page = { title: string; route: string; icon: ReactElement };
 
 export const PAGES: Page[] = [
   { title: 'Temperature', route: '/temperature', icon: <ThermostatOutlinedIcon/> },
   { title: 'Schedules', route: '/schedules', icon: <ScheduleOutlinedIcon/> },
+  { title: 'Autopilot', route: '/autopilot', icon: <BedtimeOutlinedIcon/> },
   { title: 'Data', route: '/data', icon: <BarChartOutlinedIcon/> },
   { title: 'Status', route: '/status', icon: <GraphicEqOutlinedIcon/> },
   { title: 'Settings', route: '/settings', icon: <SettingsOutlinedIcon/> },

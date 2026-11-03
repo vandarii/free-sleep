@@ -16,6 +16,7 @@ import vitals from '../routes/metrics/vitals.js';
 import presence from '../routes/metrics/presence.js';
 import logs from '../routes/logs/logs.js';
 import serverStatus from '../routes/serverStatus/serverStatus.js';
+import autopilot from '../routes/autopilot/autopilot.js';
 import logger from '../logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -30,6 +31,7 @@ export default function (app: Express) {
   app.use('/api/', jobs);
   app.use('/api/', settings);
   app.use('/api/', services);
+  app.use('/api/', autopilot);
   app.use('/api/metrics/', movement);
   app.use('/api/metrics/', sleep);
   app.use('/api/metrics/', vitals);

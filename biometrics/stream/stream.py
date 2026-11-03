@@ -46,9 +46,30 @@ from load_raw_files import load_piezo_row
 from raw_records import read_raw_record
 from service_health import update_health
 from nats_client import is_nats_running, load_nats_client
+from ambient_reporter import AMBIENT_RECORD_TYPES, AMBIENT_SUBJECTS, AmbientReporter
 
 # Global queue for processing decoded biometric data
 piezo_record_queue = queue.Queue()
+# Averages hub/cover ambient readings for Autopilot room compensation
+ambient_reporter = AmbientReporter()
+
+
+async def subscribe_ambient(js, nats_api):
+    """Ambient records arrive on their own subjects; a failure here must not stop biometrics."""
+    async def on_ambient(msg):
+        try:
+            ambient_reporter.add_record(cbor2.loads(msg.data))
+        except Exception as error:
+            logger.error(f"Failed to process ambient record: {error}")
+        await msg.ack()
+
+    for subject in AMBIENT_SUBJECTS:
+        try:
+            await js.subscribe(subject, stream="raw", cb=on_ambient, config=nats_api.ConsumerConfig(
+                deliver_policy=nats_api.DeliverPolicy.NEW
+            ))
+        except Exception as error:
+            logger.warning(f"Could not subscribe to ambient subject {subject}: {error}")
 
 
 # When NATS is running, we can listen directly for incoming data and send it to the legacy pipeline
@@ -68,6 +89,7 @@ async def watch_jetstream_directly():
         sub = await js.subscribe("raw.sens.piezo", stream="raw", config=nats_api.ConsumerConfig(
             deliver_policy=nats_api.DeliverPolicy.NEW
         ))
+        await subscribe_ambient(js, nats_api)
 
         while True:
             msg = await sub.next_msg(timeout=None)
@@ -178,7 +200,12 @@ class LatestRawFileHandler(FileSystemEventHandler):
 
             try:
                 decoded_data = cbor2.loads(payload)
-                if not isinstance(decoded_data, dict) or decoded_data.get('type') != 'piezo-dual':
+                if not isinstance(decoded_data, dict):
+                    continue
+                if decoded_data.get('type') in AMBIENT_RECORD_TYPES:
+                    ambient_reporter.add_record(decoded_data)
+                    continue
+                if decoded_data.get('type') != 'piezo-dual':
                     continue
                 recent_cutoff = datetime.now() - timedelta(minutes=2)
                 record_time = datetime.fromtimestamp(decoded_data['ts'])

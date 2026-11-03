@@ -48,3 +48,48 @@ model movement {
 }
 
 
+
+// Autopilot sleep sessions, started and ended manually (button, tap or API)
+model sleep_sessions {
+  id                 Int     @id @default(autoincrement())
+  side               String
+  started_at         Int
+  ended_at           Int?
+  end_reason         String? // manual | tap | api | out_of_bed | max_length
+  start_source       String  // manual | tap | api
+  is_nap             Boolean @default(false) // nap_requested, or shorter than the nap threshold once ended
+  nap_requested      Boolean @default(false) // started with "Start nap"
+  wake_at            Int?
+  dry_run            Boolean
+
+  @@index([side, started_at])
+}
+
+// Every temperature decision Autopilot makes (applied, or logged in dry run)
+model autopilot_decisions {
+  id          Int     @id @default(autoincrement())
+  session_id  Int
+  timestamp   Int
+  stage       String
+  target_f    Int     // stage target before live adjustments
+  set_f       Int     // value applied, or that would be applied in dry run
+  reason      String  // stage | room | wake | nap
+  detail      String?
+  dry_run     Boolean
+
+  @@index([session_id, timestamp])
+}
+
+// Ambient readings from the hub and cover sensors, averaged into 5-minute buckets
+model ambient {
+  id            Int    @id @default(autoincrement())
+  timestamp     Int    // 5-minute interval start (Unix timestamp)
+  hub_amb_c     Float?
+  cover_amb_c   Float?
+  humidity      Float?
+  left_body_c   Float?
+  right_body_c  Float?
+
+  @@unique([timestamp])
+  @@index([timestamp])
+}

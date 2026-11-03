@@ -16,6 +16,7 @@ import serverStatus from './serverStatus.js';
 import { prisma } from './db/prisma.js';
 import { setupSentryTags } from './setupSentryTags.js';
 import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
+import { startAutopilot, stopAutopilot } from './autopilot/controller.js';
 
 const port = 3000;
 const app = express();
@@ -59,6 +60,7 @@ async function gracefulShutdown(signal: string) {
   }, 15_000);
   logger.debug('Stopping node-schedule');
   await schedule.gracefulShutdown();
+  stopAutopilot();
   await disconnectPrisma();
 
 
@@ -133,6 +135,7 @@ async function startServer() {
   }
   void loadWifiSignalStrength();
   setInterval(loadWifiSignalStrength, 10_000);
+  startAutopilot();
 
   // Register signal handlers for graceful shutdown
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

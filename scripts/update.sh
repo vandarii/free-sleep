@@ -57,7 +57,8 @@ fi
 echo "Attempting to reinstall free-sleep..."
 update_succeeded=false
 # Check the download separately: running an empty script after a failed curl exits successfully.
-if installer_source=$(curl -fsSL https://raw.githubusercontent.com/throwaway31265/free-sleep/main/scripts/install.sh) \
+BRANCH="${FREE_SLEEP_BRANCH:-main}"
+if installer_source=$(curl -fsSL "https://raw.githubusercontent.com/vandarii/free-sleep/$BRANCH/scripts/install.sh") \
   && [ -n "$installer_source" ] \
   && /bin/bash -c "$installer_source" \
   && [ -d "$APP_DIR" ]; then

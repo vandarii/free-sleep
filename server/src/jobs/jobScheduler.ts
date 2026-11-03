@@ -44,10 +44,15 @@ async function setupJobs() {
     scheduleAlarmOverride(settingsData, 'left');
     scheduleAlarmOverride(settingsData, 'right');
     Object.entries(schedulesData).forEach(([side, sideSchedule]) => {
+      // Autopilot sessions own power and temperature for that side; alarms still apply
+      const autopilotEnabled = settingsData[side as Side].autopilot.enabled;
+      if (autopilotEnabled) logger.info(`Autopilot enabled for ${side}, skipping power and temperature schedules`);
       Object.entries(sideSchedule).forEach(([day, schedule]) => {
-        schedulePowerOn(settingsData, side as Side, day as DayOfWeek, schedule.power);
-        schedulePowerOffAndSleepAnalysis(settingsData, side as Side, day as DayOfWeek, schedule.power);
-        scheduleTemperatures(settingsData, side as Side, day as DayOfWeek, schedule);
+        if (!autopilotEnabled) {
+          schedulePowerOn(settingsData, side as Side, day as DayOfWeek, schedule.power);
+          schedulePowerOffAndSleepAnalysis(settingsData, side as Side, day as DayOfWeek, schedule.power);
+          scheduleTemperatures(settingsData, side as Side, day as DayOfWeek, schedule);
+        }
         scheduleAlarm(settingsData, side as Side, day as DayOfWeek, schedule);
       });
     });
