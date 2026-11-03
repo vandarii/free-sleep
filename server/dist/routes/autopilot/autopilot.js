@@ -1,12 +1,12 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="532f9e92-097b-5a4c-991b-82f4d24cca19")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="d5957231-dfd0-5664-a8d2-86592153ce2a")}catch(e){}}();
 import express from 'express';
 import { z } from 'zod';
 import logger from '../../logger.js';
-import { AmbientReadingSchema, SideBodySchema, SideParamSchema, StartSessionSchema, } from '../../autopilot/autopilotSchema.js';
+import { AmbientReadingSchema, ExternalRoomSchema, SideBodySchema, SideParamSchema, StartSessionSchema, } from '../../autopilot/autopilotSchema.js';
 import { getAutopilotStatus } from '../../autopilot/controller.js';
-import { getSession, listAmbient, listDecisions, listSessions, upsertAmbient } from '../../autopilot/autopilotStore.js';
-import { AutopilotError, endSession, nowSeconds, resumeSession, startSession } from '../../autopilot/sessionManager.js';
+import { getSession, listAmbient, listDecisions, listSessions, upsertAmbient, upsertExternalRoom } from '../../autopilot/autopilotStore.js';
+import { AutopilotError, endSession, nowSeconds, prepareBed, resumeSession, startSession } from '../../autopilot/sessionManager.js';
 const router = express.Router();
 const respondInvalid = (res, error) => {
     res.status(400).json({ error: 'Invalid request data', details: error.errors });
@@ -64,6 +64,18 @@ router.post('/autopilot/session/resume', async (req, res, next) => {
         handleError(error, res, next);
     }
 });
+router.post('/autopilot/prepare', async (req, res, next) => {
+    const parsed = SideBodySchema.safeParse(req.body);
+    if (!parsed.success)
+        return respondInvalid(res, parsed.error);
+    try {
+        await prepareBed(parsed.data.side);
+        res.status(204).end();
+    }
+    catch (error) {
+        handleError(error, res, next);
+    }
+});
 const SessionsQuerySchema = z.object({
     side: SideParamSchema.optional(),
     limit: z.coerce.number().int().min(1).max(200).default(30),
@@ -114,6 +126,19 @@ router.post('/autopilot/ambient', async (req, res, next) => {
         handleError(error, res, next);
     }
 });
+// Pushed by a trusted room sensor, e.g. a Home Assistant automation
+router.post('/autopilot/room', async (req, res, next) => {
+    const parsed = ExternalRoomSchema.safeParse(req.body);
+    if (!parsed.success)
+        return respondInvalid(res, parsed.error);
+    try {
+        await upsertExternalRoom(parsed.data.temperatureC, nowSeconds());
+        res.status(204).end();
+    }
+    catch (error) {
+        handleError(error, res, next);
+    }
+});
 export default router;
 //# sourceMappingURL=autopilot.js.map
-//# debugId=532f9e92-097b-5a4c-991b-82f4d24cca19
+//# debugId=d5957231-dfd0-5664-a8d2-86592153ce2a

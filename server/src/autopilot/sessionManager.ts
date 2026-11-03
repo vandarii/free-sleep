@@ -4,10 +4,11 @@ import logger from '../logger.js';
 import settingsDB from '../db/settings.js';
 import servicesDB from '../db/services.js';
 import { Side } from '../db/schedulesSchema.js';
-import { AutopilotSideSettings, AutopilotStage } from '../db/settingsSchema.js';
+import { AutopilotSideSettings } from '../db/settingsSchema.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { executeAnalyzeSleep } from '../jobs/analyzeSleep.js';
-import { SessionEndReason, SessionSource, SleepSession } from './autopilotSchema.js';
+import { BodyClock, SessionEndReason, SessionSource, SleepSession } from './autopilotSchema.js';
+import { coolDepthForSession, estimateTemperatureMinimumHour, MIN_SESSIONS_FOR_ESTIMATE } from './bodyClock.js';
 import {
   closeSession,
   createSession,
@@ -15,14 +16,16 @@ import {
   getLastDecision,
   getLastEndedSession,
   getLatestAmbient,
+  getLatestExternalRoomC,
   insertDecision,
+  listSleepSessionsBetween,
   reopenSession,
 } from './autopilotStore.js';
 import {
   AMBIENT_MAX_AGE_SECONDS,
   describeDecision,
   planTemperature,
-  roomTemperatureC,
+  resolveRoom,
   shouldApply,
   TemperaturePlan,
 } from './stages.js';
@@ -31,6 +34,9 @@ import {
 export const RESUME_WINDOW_SECONDS = 15 * 60;
 // The pod powers a side off after 12 hours, so re-assert power well before that
 const POWER_REFRESH_SECONDS = 10 * 60 * 60;
+const BODY_CLOCK_WINDOW_SECONDS = 14 * 24 * 60 * 60;
+// "Get bed ready" turns itself off if no session starts
+const PREPARE_BED_SECONDS = 60 * 60;
 
 export class AutopilotError extends Error {
   public status: number;
@@ -43,7 +49,7 @@ export class AutopilotError extends Error {
 
 type ControllerState = {
   sessionId: number | null;
-  lastStage: AutopilotStage | null;
+  lastTargetF: number | null;
   lastSetF: number | null;
   lastChangeAt: number | null;
   lastPowerOnAt: number | null;
@@ -51,7 +57,7 @@ type ControllerState = {
 
 const emptyState = (): ControllerState => ({
   sessionId: null,
-  lastStage: null,
+  lastTargetF: null,
   lastSetF: null,
   lastChangeAt: null,
   lastPowerOnAt: null,
@@ -95,12 +101,29 @@ const hydrateState = async (side: Side, session: SleepSession) => {
   const lastDecision = await getLastDecision(session.id);
   controllerState[side] = {
     sessionId: session.id,
-    lastStage: lastDecision?.stage ?? null,
+    lastTargetF: lastDecision?.targetF ?? null,
     lastSetF: lastDecision?.setF ?? null,
     lastChangeAt: lastDecision?.timestamp ?? null,
     lastPowerOnAt: null,
   };
   return controllerState[side];
+};
+
+const hourOfDay = (unixSeconds: number, timeZone: string) => {
+  const time = moment.unix(unixSeconds).tz(timeZone);
+  return time.hours() + time.minutes() / 60;
+};
+
+// Estimates the body clock from the two weeks of full sleep sessions before a moment in time
+export const getBodyClock = async (side: Side, before: number): Promise<BodyClock> => {
+  const sessions = await listSleepSessionsBetween(side, before - BODY_CLOCK_WINDOW_SECONDS, before);
+  const midSleepHours = sessions.map(session =>
+    hourOfDay((session.startedAt + (session.endedAt ?? session.startedAt)) / 2, settingsDB.data.timeZone));
+  return {
+    temperatureMinimumHour: estimateTemperatureMinimumHour(midSleepHours),
+    sessionCount: sessions.length,
+    sessionsNeeded: MIN_SESSIONS_FOR_ESTIMATE,
+  };
 };
 
 // One control step: plan the temperature, then apply it (or log it in dry run)
@@ -111,19 +134,28 @@ export const runControllerStep = async (
   now: number,
 ): Promise<TemperaturePlan> => {
   const state = await hydrateState(side, session);
-  const ambient = await getLatestAmbient(AMBIENT_MAX_AGE_SECONDS, now);
+  const [ambient, externalRoomC] = await Promise.all([
+    getLatestAmbient(AMBIENT_MAX_AGE_SECONDS, now),
+    getLatestExternalRoomC(AMBIENT_MAX_AGE_SECONDS, now),
+  ]);
+  const bodyClock = await getBodyClock(side, session.startedAt);
   const plan = planTemperature({
     settings,
     startedAt: session.startedAt,
     now,
+    coolDepthF: coolDepthForSession(
+      settings.earlyCoolF,
+      hourOfDay(session.startedAt, settingsDB.data.timeZone),
+      bodyClock.temperatureMinimumHour,
+    ),
     wakeAt: session.wakeAt,
     isNap: session.isNap,
-    roomC: roomTemperatureC(ambient, settings),
+    roomC: resolveRoom(ambient, externalRoomC, settings).roomC,
   });
 
   const apply = shouldApply({
     plan,
-    lastStage: state.lastStage,
+    lastTargetF: state.lastTargetF,
     lastSetF: state.lastSetF,
     lastChangeAt: state.lastChangeAt,
     now,
@@ -142,10 +174,10 @@ export const runControllerStep = async (
       stage: plan.stage,
       targetF: plan.stageTargetF,
       setF: plan.desiredF,
-      ...describeDecision(plan, state.lastStage),
+      ...describeDecision(plan, state.lastTargetF),
       dryRun: session.dryRun,
     });
-    state.lastStage = plan.stage;
+    state.lastTargetF = plan.stageTargetF;
     state.lastSetF = plan.desiredF;
     state.lastChangeAt = now;
   }
@@ -215,6 +247,19 @@ const endActiveSession = async ({ side, reason, endedAt }: EndOptions) => {
 };
 
 export const endSession = (options: EndOptions) => withSideLock(options.side, () => endActiveSession(options));
+
+// Warms the side to the entry temperature before bed. It needs no session, and the pod
+// turns it off after an hour if no session takes over.
+export const prepareBed = (side: Side) => withSideLock(side, async () => {
+  const sideSettings = await getSideSettings(side);
+  const { enabled, dryRun, entryTemperatureF } = sideSettings.autopilot;
+  if (!enabled) throw new AutopilotError(`Autopilot is disabled for the ${side} side`);
+  if (dryRun) throw new AutopilotError('Dry run does not change the temperature');
+  if (sideSettings.awayMode) throw new AutopilotError(`The ${side} side is in away mode`);
+  if (await getActiveSession(side)) throw new AutopilotError('A session is already running');
+  await updateDeviceStatus({ [side]: { isOn: true, targetTemperatureF: entryTemperatureF, secondsRemaining: PREPARE_BED_SECONDS } });
+  logger.info(`Autopilot: preparing ${side} side at ${entryTemperatureF}°F`);
+});
 
 // Triple-tap behaviour: start when idle, end when a session is running
 export const toggleSession = (side: Side, source: SessionSource) => withSideLock(side, async () => {

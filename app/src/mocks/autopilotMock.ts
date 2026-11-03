@@ -14,15 +14,17 @@ type Side = 'left' | 'right';
 export const createAutopilotSettings = (enabled = true): AutopilotSideSettings => ({
   enabled,
   dryRun: true,
-  baseTemperatureF: 68,
-  stageOffsetsF: { falling: -2, deep: -5, rem: -2, wake: 4 },
-  napTemperatureF: 66,
+  baseTemperatureF: 72,
+  entryTemperatureF: 76,
+  earlyCoolF: 3,
+  wakeRiseF: 4,
+  napTemperatureF: 72,
   maxAdjustmentF: 4,
   minMinutesBetweenChanges: 20,
   autoEndAbsentMinutes: 60,
   maxSessionHours: 14,
   napMaxMinutes: 90,
-  roomCompensation: { enabled: true, referenceC: 22, calibrationOffsetC: 0 },
+  roomCompensation: { enabled: false, referenceC: 20, calibrationOffsetC: 0 },
 });
 
 const sessions: SleepSession[] = [];
@@ -49,22 +51,27 @@ const seedNight = (side: Side, nightsAgo: number) => {
   };
   sessions.push(session);
   const at = (minutes: number) => start + minutes * 60;
-  addDecision(session.id, at(0), { stage: 'falling', targetF: 66, setF: 66, reason: 'stage', detail: null });
-  addDecision(session.id, at(30), { stage: 'deep', targetF: 63, setF: 63, reason: 'stage', detail: null });
-  addDecision(session.id, at(95), { stage: 'deep', targetF: 63, setF: 62, reason: 'room', detail: 'Room warm at 23.4 °C' });
-  addDecision(session.id, at(140), { stage: 'deep', targetF: 63, setF: 63, reason: 'stage', detail: 'Back to stage target' });
-  addDecision(session.id, at(180), { stage: 'rem', targetF: 66, setF: 66, reason: 'stage', detail: null });
-  addDecision(session.id, at(210), { stage: 'rem', targetF: 66, setF: 68, reason: 'room', detail: 'Room cool at 19.8 °C' });
-  addDecision(session.id, at(300), { stage: 'rem', targetF: 66, setF: 67, reason: 'room', detail: 'Room cool at 20.6 °C' });
-  for (let step = 0; step <= 6; step++) {
-    addDecision(session.id, at(480 + step * 5), {
-      stage: 'wake', targetF: 72, setF: 66 + step, reason: 'wake', detail: 'Wake warm-up',
-    });
+  addDecision(session.id, at(0), { stage: 'entry', targetF: 76, setF: 76, reason: 'schedule', detail: null });
+  for (let step = 1; step <= 6; step++) {
+    const targetF = 76 - step;
+    addDecision(session.id, at(15 + step * 7.5), { stage: 'cooling', targetF, setF: targetF, reason: 'schedule', detail: null });
+  }
+  for (let step = 1; step <= 2; step++) {
+    const targetF = 70 + step;
+    addDecision(session.id, at(190 + step * 45), { stage: 'easing', targetF, setF: targetF, reason: 'schedule', detail: null });
+  }
+  addDecision(session.id, at(340), { stage: 'steady', targetF: 72, setF: 69, reason: 'room', detail: 'Room warm at 23.4 °C' });
+  addDecision(session.id, at(400), { stage: 'steady', targetF: 72, setF: 72, reason: 'room', detail: 'Room back to normal' });
+  for (let step = 1; step <= 4; step++) {
+    const targetF = 72 + step;
+    addDecision(session.id, at(480 + step * 7.5), { stage: 'wake', targetF, setF: targetF, reason: 'wake', detail: 'Wake warm-up' });
   }
   for (let time = start; time <= end; time += 300) {
     const minutes = (time - start) / 60;
     const roomC = minutes < 150 ? 23.2 : minutes < 330 ? 20 : 21.2;
-    ambient.push({ timestamp: time, hubAmbC: roomC, coverAmbC: roomC + 2, humidity: 48, leftBodyC: 31.5, rightBodyC: 30.5 });
+    ambient.push({
+      timestamp: time, hubAmbC: roomC, coverAmbC: roomC + 2, humidity: 48, leftBodyC: 31.5, rightBodyC: 30.5, externalRoomC: null,
+    });
   }
 };
 
@@ -84,17 +91,16 @@ const sideStatus = (side: Side, settings: AutopilotSideSettings): AutopilotSideS
   const session = activeSession(side);
   const sessionDecisions = session ? decisions.filter(decision => decision.sessionId === session.id) : [];
   const lastDecision = sessionDecisions[sessionDecisions.length - 1] ?? null;
-  const elapsedMinutes = session ? (nowSeconds() - session.startedAt) / 60 : 0;
-  const stage = !session ? null : elapsedMinutes < 30 ? 'falling' : elapsedMinutes < 180 ? 'deep' : 'rem';
-  const stageTargetF = stage ? settings.baseTemperatureF + settings.stageOffsetsF[stage] : null;
   return {
     enabled: settings.enabled,
     dryRun: settings.dryRun,
     session,
-    stage,
-    stageTargetF,
-    setF: lastDecision?.setF ?? stageTargetF,
+    stage: lastDecision?.stage ?? null,
+    stageTargetF: lastDecision?.targetF ?? null,
+    setF: lastDecision?.setF ?? null,
+    bodyClock: { temperatureMinimumHour: null, sessionCount: 2, sessionsNeeded: 4 },
     roomC: latestAmbient().hubAmbC,
+    roomSource: 'pod',
     humidity: latestAmbient().humidity,
     absentSince: null,
     lastDecision,
@@ -132,9 +138,9 @@ export const startAutopilotSession = (side: Side, settings: AutopilotSideSetting
     isNap: nap, napRequested: nap, wakeAt: wakeAt ?? null, dryRun: settings.dryRun,
   };
   sessions.push(session);
-  const targetF = nap ? settings.napTemperatureF : settings.baseTemperatureF + settings.stageOffsetsF.falling;
+  const targetF = nap ? settings.napTemperatureF : settings.entryTemperatureF;
   addDecision(session.id, now, {
-    stage: 'falling', targetF, setF: targetF, reason: nap ? 'nap' : 'stage', detail: nap ? 'Nap temperature' : null,
+    stage: nap ? 'steady' : 'entry', targetF, setF: targetF, reason: nap ? 'nap' : 'schedule', detail: nap ? 'Nap temperature' : null,
   });
   return session;
 };

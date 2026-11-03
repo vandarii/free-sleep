@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="35eecfb3-954b-5943-abcc-58479a0e5fa8")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="70b9b7fd-46fa-5fba-93c4-cce87393e6aa")}catch(e){}}();
 import { prisma } from '../db/prisma.js';
 // Ambient readings are stored in 5-minute buckets
 const AMBIENT_BUCKET_SECONDS = 300;
@@ -33,6 +33,7 @@ const toAmbient = (record) => ({
     humidity: record.humidity,
     leftBodyC: record.left_body_c,
     rightBodyC: record.right_body_c,
+    externalRoomC: record.external_room_c,
 });
 export const getActiveSession = async (side) => {
     const record = await prisma.sleep_sessions.findFirst({
@@ -87,6 +88,14 @@ export const listSessions = async (side, limit) => {
     });
     return records.map(toSession);
 };
+// Full sleep sessions that ended within a time range, for the body clock estimate
+export const listSleepSessionsBetween = async (side, startTime, endTime) => {
+    const records = await prisma.sleep_sessions.findMany({
+        where: { side, is_nap: false, ended_at: { not: null, gte: startTime, lte: endTime } },
+        orderBy: { started_at: 'desc' },
+    });
+    return records.map(toSession);
+};
 export const getSession = async (id) => {
     const record = await prisma.sleep_sessions.findUnique({ where: { id } });
     return record ? toSession(record) : null;
@@ -120,8 +129,9 @@ export const listDecisions = async (sessionId) => {
     });
     return records.map(toDecision);
 };
+const toBucket = (timestamp) => timestamp - (timestamp % AMBIENT_BUCKET_SECONDS);
 export const upsertAmbient = async (reading) => {
-    const timestamp = reading.timestamp - (reading.timestamp % AMBIENT_BUCKET_SECONDS);
+    const timestamp = toBucket(reading.timestamp);
     const data = {
         hub_amb_c: reading.hubAmbC ?? null,
         cover_amb_c: reading.coverAmbC ?? null,
@@ -134,6 +144,22 @@ export const upsertAmbient = async (reading) => {
         create: { timestamp, ...data },
         update: data,
     });
+};
+// Stored next to the pod's readings so the two can be compared later
+export const upsertExternalRoom = async (temperatureC, now) => {
+    const timestamp = toBucket(now);
+    await prisma.ambient.upsert({
+        where: { timestamp },
+        create: { timestamp, external_room_c: temperatureC },
+        update: { external_room_c: temperatureC },
+    });
+};
+export const getLatestExternalRoomC = async (maxAgeSeconds, now) => {
+    const record = await prisma.ambient.findFirst({
+        where: { timestamp: { gte: now - maxAgeSeconds }, external_room_c: { not: null } },
+        orderBy: { timestamp: 'desc' },
+    });
+    return record?.external_room_c ?? null;
 };
 export const getLatestAmbient = async (maxAgeSeconds, now) => {
     const record = await prisma.ambient.findFirst({
@@ -150,4 +176,4 @@ export const listAmbient = async (startTime, endTime) => {
     return records.map(toAmbient);
 };
 //# sourceMappingURL=autopilotStore.js.map
-//# debugId=35eecfb3-954b-5943-abcc-58479a0e5fa8
+//# debugId=70b9b7fd-46fa-5fba-93c4-cce87393e6aa

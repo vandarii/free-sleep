@@ -1,6 +1,6 @@
 // LowDB, stores the schedules in /persistent/free-sleep-data/lowdb/settingsDB.json
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="ef735669-8e71-58e8-ac29-92fded71a1ef")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="6cfd2f23-db66-5051-bb99-af087ea64639")}catch(e){}}();
 import _ from 'lodash';
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
@@ -40,22 +40,19 @@ const defaultSideSettings = {
     autopilot: {
         enabled: false,
         dryRun: true,
-        baseTemperatureF: 68,
-        stageOffsetsF: {
-            falling: -2,
-            deep: -5,
-            rem: -2,
-            wake: 4,
-        },
-        napTemperatureF: 66,
+        baseTemperatureF: 72,
+        entryTemperatureF: 76,
+        earlyCoolF: 3,
+        wakeRiseF: 4,
+        napTemperatureF: 72,
         maxAdjustmentF: 4,
         minMinutesBetweenChanges: 20,
         autoEndAbsentMinutes: 60,
         maxSessionHours: 14,
         napMaxMinutes: 90,
         roomCompensation: {
-            enabled: true,
-            referenceC: 22,
+            enabled: false,
+            referenceC: 20,
             calibrationOffsetC: 0,
         },
     },
@@ -86,4 +83,4 @@ settingsDB.data = _.merge({}, defaultData, settingsDB.data);
 await settingsDB.write();
 export default settingsDB;
 //# sourceMappingURL=settings.js.map
-//# debugId=ef735669-8e71-58e8-ac29-92fded71a1ef
+//# debugId=6cfd2f23-db66-5051-bb99-af087ea64639

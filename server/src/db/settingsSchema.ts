@@ -30,25 +30,26 @@ export const TapConfig = z.discriminatedUnion('type', [
   SleepSessionTapConfig,
 ]);
 
-export const AUTOPILOT_STAGES = ['falling', 'deep', 'rem', 'wake'] as const;
+// Parts of the time-based temperature curve. These are positions on a schedule, not detected sleep stages
+export const AUTOPILOT_STAGES = ['entry', 'cooling', 'easing', 'steady', 'wake'] as const;
 export const AutopilotStageSchema = z.enum(AUTOPILOT_STAGES);
 
-const StageOffset = z.number().min(-20).max(20);
+const AutopilotTemperature = z.number().min(60).max(100);
 
 const AutopilotSideSettingsSchema = z.object({
   enabled: z.boolean(),
   // Log decisions without changing the temperature
   dryRun: z.boolean(),
-  baseTemperatureF: z.number().min(55).max(110),
-  // Offsets are relative to baseTemperatureF
-  stageOffsetsF: z.object({
-    falling: StageOffset,
-    deep: StageOffset,
-    rem: StageOffset,
-    wake: StageOffset,
-  }),
-  napTemperatureF: z.number().min(55).max(110),
-  // Live adjustments never move further than this from the stage target
+  // Where the curve settles for the rest of the session
+  baseTemperatureF: AutopilotTemperature,
+  // Neutral temperature for getting into bed, cold entry is the least supported start
+  entryTemperatureF: AutopilotTemperature,
+  // How far below base the early part of the session goes
+  earlyCoolF: z.number().min(0).max(10),
+  // Rise over the last 30 minutes before an optional wake time
+  wakeRiseF: z.number().min(0).max(6),
+  napTemperatureF: AutopilotTemperature,
+  // Room compensation never moves further than this from the curve when the room is warm
   maxAdjustmentF: z.number().min(0).max(10),
   minMinutesBetweenChanges: z.number().min(5).max(120),
   // Continuous absence that ends a session, backdated to when the absence began

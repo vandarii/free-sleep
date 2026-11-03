@@ -45,4 +45,6 @@ export const startSleepSession = (body: StartSessionBody) => axios.post<SleepSes
 
 export const endSleepSession = (side: Side) => axios.post<SleepSession>('/autopilot/session/end', { side });
 
+export const prepareBed = (side: Side) => axios.post('/autopilot/prepare', { side });
+
 export const resumeSleepSession = (side: Side) => axios.post<SleepSession>('/autopilot/session/resume', { side });

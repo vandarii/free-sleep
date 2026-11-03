@@ -2,15 +2,16 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
 import {
+  clampTemperatureF,
   describeDecision,
   planTemperature,
-  resolveStage,
+  resolveRoom,
   roomAdjustmentF,
-  roomTemperatureC,
+  scheduleAt,
   shouldApply,
-  stageTargetF,
   wakeRampF,
 } from '../server/src/autopilot/stages.ts';
+import { CAUTIOUS_COOL_F, coolDepthForSession, estimateTemperatureMinimumHour } from '../server/src/autopilot/bodyClock.ts';
 import { getAbsentSince, recordPresence, resetPresence } from '../server/src/autopilot/presenceTracker.ts';
 
 const START = 1_762_200_000;
@@ -19,100 +20,136 @@ const minutes = (count) => count * 60;
 const settings = () => ({
   enabled: true,
   dryRun: true,
-  baseTemperatureF: 68,
-  stageOffsetsF: { falling: -2, deep: -5, rem: -2, wake: 4 },
-  napTemperatureF: 66,
+  baseTemperatureF: 72,
+  entryTemperatureF: 76,
+  earlyCoolF: 3,
+  wakeRiseF: 4,
+  napTemperatureF: 72,
   maxAdjustmentF: 4,
   minMinutesBetweenChanges: 20,
   autoEndAbsentMinutes: 60,
   maxSessionHours: 14,
   napMaxMinutes: 90,
-  roomCompensation: { enabled: true, referenceC: 22, calibrationOffsetC: 0 },
+  roomCompensation: { enabled: true, referenceC: 20, calibrationOffsetC: 0 },
 });
 
-test('stages follow time since the session started', () => {
-  assert.equal(resolveStage({ startedAt: START, now: START + minutes(10) }), 'falling');
-  assert.equal(resolveStage({ startedAt: START, now: START + minutes(30) }), 'deep');
-  assert.equal(resolveStage({ startedAt: START, now: START + minutes(179) }), 'deep');
-  assert.equal(resolveStage({ startedAt: START, now: START + minutes(180) }), 'rem');
+const at = (elapsedMinutes, coolDepthF = 3) =>
+  scheduleAt({ settings: settings(), startedAt: START, now: START + minutes(elapsedMinutes), coolDepthF });
+
+test('the curve holds the entry temperature, ramps down, holds, then eases to base', () => {
+  assert.deepEqual(at(0), { stage: 'entry', temperatureF: 76 });
+  assert.deepEqual(at(14), { stage: 'entry', temperatureF: 76 });
+  assert.equal(at(15).stage, 'cooling');
+  assert.equal(at(15).temperatureF, 76);
+  // 76 -> 69 at 7.5 minutes per degree ends 52.5 minutes after the hold
+  assert.deepEqual(at(68), { stage: 'cooling', temperatureF: 69 });
+  assert.deepEqual(at(189), { stage: 'cooling', temperatureF: 69 });
+  assert.equal(at(190).stage, 'easing');
+  assert.deepEqual(at(280), { stage: 'steady', temperatureF: 72 });
+  assert.deepEqual(at(600), { stage: 'steady', temperatureF: 72 });
 });
 
-test('the wake stage takes over 30 minutes before the wake time', () => {
+test('the curve never moves faster than one degree per 7.5 minutes', () => {
+  for (let elapsed = 0; elapsed < 600; elapsed++) {
+    assert.ok(Math.abs(at(elapsed + 7.5).temperatureF - at(elapsed).temperatureF) <= 1 + 1e-9, `at minute ${elapsed}`);
+  }
+});
+
+test('cautious cooling stops higher', () => {
+  assert.equal(at(120, 2).temperatureF, 70);
+});
+
+test('temperatures stay inside the in-bed limits', () => {
+  assert.equal(clampTemperatureF(55), 60);
+  assert.equal(clampTemperatureF(110), 100);
+});
+
+test('the wake ramp rises from the curve, stops at the wake time and is capped', () => {
+  const input = { settings: settings(), startedAt: START, coolDepthF: 3 };
   const wakeAt = START + minutes(480);
-  assert.equal(resolveStage({ startedAt: START, now: wakeAt - minutes(31), wakeAt }), 'rem');
-  assert.equal(resolveStage({ startedAt: START, now: wakeAt - minutes(30), wakeAt }), 'wake');
-  // A wake time early in the session still wins over the falling-asleep stage
-  assert.equal(resolveStage({ startedAt: START, now: START + minutes(5), wakeAt: START + minutes(20) }), 'wake');
+  assert.equal(wakeRampF({ ...input, now: wakeAt - minutes(30) }, wakeAt), 72);
+  assert.equal(wakeRampF({ ...input, now: wakeAt - minutes(15) }, wakeAt), 74);
+  assert.equal(wakeRampF({ ...input, now: wakeAt }, wakeAt), 76);
+  assert.equal(wakeRampF({ ...input, now: wakeAt + minutes(10) }, wakeAt), 76);
+  const warmBase = { ...settings(), baseTemperatureF: 79, entryTemperatureF: 79 };
+  assert.equal(wakeRampF({ ...input, settings: warmBase, now: wakeAt }, wakeAt), 80);
 });
 
-test('stage targets are base plus offset, clamped to the pod range', () => {
+test('room compensation reacts to heat and barely to cold', () => {
   const config = settings();
-  assert.equal(stageTargetF(config, 'deep'), 63);
-  assert.equal(stageTargetF(config, 'wake'), 72);
-  config.baseTemperatureF = 57;
-  assert.equal(stageTargetF(config, 'deep'), 55);
-});
-
-test('the wake ramp moves linearly from the REM target to the wake target', () => {
-  const config = settings();
-  const wakeAt = START + minutes(480);
-  assert.equal(wakeRampF(config, wakeAt - minutes(30), wakeAt), 66);
-  assert.equal(wakeRampF(config, wakeAt - minutes(15), wakeAt), 69);
-  assert.equal(wakeRampF(config, wakeAt, wakeAt), 72);
-  assert.equal(wakeRampF(config, wakeAt + minutes(10), wakeAt), 72);
-});
-
-test('room compensation has a deadband, a direction and a cap', () => {
-  const config = settings();
-  assert.equal(roomAdjustmentF(config, 22.8), 0);
-  assert.equal(roomAdjustmentF(config, 24), -2);
-  assert.equal(roomAdjustmentF(config, 19), 3);
-  assert.equal(roomAdjustmentF(config, 35), -4);
+  assert.equal(roomAdjustmentF(config, 19.5), 0);
+  assert.equal(roomAdjustmentF(config, 20.8), 0);
+  assert.equal(roomAdjustmentF(config, 23), -3);
+  assert.equal(roomAdjustmentF(config, 30), -4);
+  assert.equal(roomAdjustmentF(config, 18.5), 0);
+  assert.equal(roomAdjustmentF(config, 16), 1);
+  assert.equal(roomAdjustmentF(config, 10), 2);
   assert.equal(roomAdjustmentF(config, null), 0);
   config.roomCompensation.enabled = false;
   assert.equal(roomAdjustmentF(config, 30), 0);
 });
 
-test('room temperature prefers the hub sensor and applies calibration', () => {
+test('a fresh external sensor wins, then the hub, then the cover', () => {
   const config = settings();
   config.roomCompensation.calibrationOffsetC = -1.5;
-  const reading = { timestamp: START, hubAmbC: 24, coverAmbC: 26, humidity: 50, leftBodyC: null, rightBodyC: null };
-  assert.equal(roomTemperatureC(reading, config), 22.5);
-  assert.equal(roomTemperatureC({ ...reading, hubAmbC: null }, config), 24.5);
-  assert.equal(roomTemperatureC(null, config), null);
+  const reading = { timestamp: START, hubAmbC: 24, coverAmbC: 26, humidity: 50, leftBodyC: null, rightBodyC: null, externalRoomC: null };
+  assert.deepEqual(resolveRoom(reading, 19.8, config), { roomC: 19.8, source: 'external' });
+  assert.deepEqual(resolveRoom(reading, null, config), { roomC: 22.5, source: 'pod' });
+  assert.deepEqual(resolveRoom({ ...reading, hubAmbC: null }, null, config), { roomC: 24.5, source: 'pod' });
+  assert.deepEqual(resolveRoom(null, null, config), { roomC: null, source: null });
 });
 
 test('plans explain why the temperature is what it is', () => {
-  const config = settings();
-  const deep = planTemperature({ settings: config, startedAt: START, now: START + minutes(60), isNap: false, roomC: 22 });
-  assert.deepEqual([deep.stage, deep.desiredF, deep.reason], ['deep', 63, 'stage']);
+  const input = { settings: settings(), startedAt: START, now: START + minutes(120), coolDepthF: 3, isNap: false };
+  const normal = planTemperature({ ...input, roomC: 20 });
+  assert.deepEqual([normal.stage, normal.desiredF, normal.reason], ['cooling', 69, 'schedule']);
 
-  const warmRoom = planTemperature({ settings: config, startedAt: START, now: START + minutes(60), isNap: false, roomC: 25 });
-  assert.deepEqual([warmRoom.desiredF, warmRoom.reason], [60, 'room']);
+  const warmRoom = planTemperature({ ...input, roomC: 23 });
+  assert.deepEqual([warmRoom.stageTargetF, warmRoom.desiredF, warmRoom.reason], [69, 66, 'room']);
 
-  const nap = planTemperature({ settings: config, startedAt: START, now: START + minutes(60), isNap: true, roomC: 25 });
-  assert.deepEqual([nap.desiredF, nap.reason], [66, 'nap']);
+  const nap = planTemperature({ ...input, isNap: true, roomC: 23 });
+  assert.deepEqual([nap.desiredF, nap.reason], [72, 'nap']);
+
+  const waking = planTemperature({ ...input, now: START + minutes(470), wakeAt: START + minutes(480), roomC: 23 });
+  assert.equal(waking.reason, 'wake');
 });
 
-test('room changes are rate limited but stage changes apply at once', () => {
+test('schedule steps apply at once but room changes are rate limited', () => {
   const now = START + minutes(60);
-  const roomPlan = { stage: 'deep', stageTargetF: 63, desiredF: 61, reason: 'room', detail: null };
-  const base = { lastStage: 'deep', lastSetF: 63, now, minMinutesBetweenChanges: 20 };
+  const roomPlan = { stage: 'cooling', stageTargetF: 69, desiredF: 67, reason: 'room', detail: null };
+  const base = { lastTargetF: 69, lastSetF: 69, now, minMinutesBetweenChanges: 20 };
   assert.equal(shouldApply({ ...base, plan: roomPlan, lastChangeAt: now - minutes(5) }), false);
   assert.equal(shouldApply({ ...base, plan: roomPlan, lastChangeAt: now - minutes(20) }), true);
-  assert.equal(shouldApply({ ...base, plan: { ...roomPlan, desiredF: 63 }, lastChangeAt: now - minutes(60) }), false);
-  const remPlan = { stage: 'rem', stageTargetF: 66, desiredF: 66, reason: 'stage', detail: null };
-  assert.equal(shouldApply({ ...base, plan: remPlan, lastChangeAt: now - minutes(1) }), true);
-  assert.equal(shouldApply({ ...base, lastStage: null, lastSetF: null, plan: roomPlan, lastChangeAt: null }), true);
+  assert.equal(shouldApply({ ...base, plan: { ...roomPlan, desiredF: 69 }, lastChangeAt: now - minutes(60) }), false);
+  const step = { stage: 'easing', stageTargetF: 70, desiredF: 70, reason: 'schedule', detail: null };
+  assert.equal(shouldApply({ ...base, plan: step, lastChangeAt: now - minutes(1) }), true);
+  assert.equal(shouldApply({ ...base, lastTargetF: null, lastSetF: null, plan: roomPlan, lastChangeAt: null }), true);
 });
 
 test('logged reasons describe what actually changed', () => {
-  const plan = (reason, stage, detail = null) => ({ stage, stageTargetF: 63, desiredF: 63, reason, detail });
-  assert.deepEqual(describeDecision(plan('room', 'deep', 'Room warm at 24.0 °C'), 'falling'), { reason: 'stage', detail: 'Room warm at 24.0 °C' });
-  assert.deepEqual(describeDecision(plan('room', 'deep', 'Room warm at 24.0 °C'), 'deep'), { reason: 'room', detail: 'Room warm at 24.0 °C' });
-  assert.deepEqual(describeDecision(plan('stage', 'deep'), 'deep'), { reason: 'stage', detail: 'Back to stage target' });
-  assert.deepEqual(describeDecision(plan('stage', 'rem'), 'deep'), { reason: 'stage', detail: null });
-  assert.deepEqual(describeDecision(plan('wake', 'wake', 'Wake warm-up'), 'wake'), { reason: 'wake', detail: 'Wake warm-up' });
+  const plan = (reason, stageTargetF, detail = null) => ({ stage: 'cooling', stageTargetF, desiredF: 66, reason, detail });
+  assert.deepEqual(describeDecision(plan('room', 69, 'Room warm at 23.0 °C'), 70), { reason: 'schedule', detail: 'Room warm at 23.0 °C' });
+  assert.deepEqual(describeDecision(plan('room', 69, 'Room warm at 23.0 °C'), 69), { reason: 'room', detail: 'Room warm at 23.0 °C' });
+  assert.deepEqual(describeDecision(plan('schedule', 69), 69), { reason: 'room', detail: 'Room back to normal' });
+  assert.deepEqual(describeDecision(plan('schedule', 69), 70), { reason: 'schedule', detail: null });
+  assert.deepEqual(describeDecision(plan('wake', 72, 'Wake warm-up'), 72), { reason: 'wake', detail: 'Wake warm-up' });
+});
+
+test('the body clock needs enough sessions and handles midnight', () => {
+  assert.equal(estimateTemperatureMinimumHour([3, 4, 5]), null);
+  assert.ok(Math.abs(estimateTemperatureMinimumHour([3, 3, 3, 3]) - 4.2) < 1e-9);
+  // Mid-sleep around midnight must not average to noon
+  assert.ok(Math.abs(estimateTemperatureMinimumHour([23, 1, 23, 1]) - 1.2) < 1e-9);
+});
+
+test('early cooling is limited when the body clock is unknown or REM is likely', () => {
+  assert.equal(coolDepthForSession(3, 8.5, null), CAUTIOUS_COOL_F);
+  // Minimum at 06:00: the REM window (08:00-12:00) overlaps a morning session
+  assert.equal(coolDepthForSession(3, 8.5, 6), CAUTIOUS_COOL_F);
+  // Minimum at 05:00: a 22:00 session is clear of the window
+  assert.equal(coolDepthForSession(3, 22, 5), 3);
+  // Already shallower than the limit
+  assert.equal(coolDepthForSession(1, 8.5, null), 1);
 });
 
 beforeEach(() => resetPresence());

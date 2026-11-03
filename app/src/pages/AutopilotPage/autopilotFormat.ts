@@ -1,26 +1,35 @@
 import moment from 'moment-timezone';
 import { formatTemperature } from '@lib/temperatureConversions.ts';
-import type { DecisionReason } from '@api/autopilot.ts';
-import type { AutopilotStage } from '@api/settingsSchema.ts';
+import type { AutopilotDecision, DecisionReason } from '@api/autopilot.ts';
 
-export const STAGE_LABELS: Record<AutopilotStage, string> = {
+// Includes the stage names logged before the time-based curve, so old sessions still read well
+export const STAGE_LABELS: Record<AutopilotDecision['stage'], string> = {
+  entry: 'Getting into bed',
+  cooling: 'Early cooling',
+  easing: 'Easing to base',
+  steady: 'Steady',
+  wake: 'Wake-up',
   falling: 'Falling asleep',
   deep: 'Deep sleep',
   rem: 'REM',
-  wake: 'Wake-up',
 };
 
-export const SHORT_STAGE_LABELS: Record<AutopilotStage, string> = {
+export const SHORT_STAGE_LABELS: Record<AutopilotDecision['stage'], string> = {
+  entry: 'Entry',
+  cooling: 'Cool',
+  easing: 'Ease',
+  steady: 'Steady',
+  wake: 'Wake',
   falling: 'Falling',
   deep: 'Deep',
   rem: 'REM',
-  wake: 'Wake',
 };
 
 // Each reason gets a color and a marker shape so the chart doesn't rely on color alone
 type ReasonStyle = { label: string; color: string; shape: 'circle' | 'diamond' | 'square' | 'triangle' };
 
 export const REASON_STYLES: Record<DecisionReason, ReasonStyle> = {
+  schedule: { label: 'Schedule change', color: '#8a8a8a', shape: 'circle' },
   stage: { label: 'Stage change', color: '#8a8a8a', shape: 'circle' },
   room: { label: 'Room temperature', color: '#77cba5', shape: 'diamond' },
   wake: { label: 'Wake warm-up', color: '#f0b45a', shape: 'triangle' },

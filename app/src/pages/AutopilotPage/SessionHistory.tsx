@@ -21,12 +21,13 @@ const sessionTitle = (session: SleepSession) => {
 
 type DecisionListRow = { decision: AutopilotDecision; previous?: AutopilotDecision; finalF?: number };
 
-// The wake ramp logs one decision per degree; show it as a single row with its final temperature
-const collapseWakeRamp = (decisions: AutopilotDecision[]): DecisionListRow[] => {
+// Ramps log one decision per degree; show each ramp as a single row with its final temperature
+const collapseRamps = (decisions: AutopilotDecision[]): DecisionListRow[] => {
   const rows: DecisionListRow[] = [];
   decisions.forEach((decision, index) => {
     const lastRow = rows[rows.length - 1];
-    if (decision.reason === 'wake' && lastRow?.decision.reason === 'wake') {
+    const isRampStep = decision.reason === 'wake' || (decision.reason === 'schedule' && !decision.detail);
+    if (isRampStep && lastRow?.decision.reason === decision.reason && lastRow.decision.stage === decision.stage) {
       lastRow.finalF = decision.setF;
       return;
     }
@@ -41,7 +42,7 @@ export default function SessionHistory({ sessions, selectedId, onSelect, detail,
       <Card>
         <CardContent>
           <Typography variant="body2" sx={ { color: 'text.secondary' } }>
-            No sleep sessions yet. Your first night will show up here with a chart of every adjustment.
+            No sleep sessions yet. Your first sleep will show up here with a chart of every adjustment.
           </Typography>
         </CardContent>
       </Card>
@@ -61,7 +62,7 @@ export default function SessionHistory({ sessions, selectedId, onSelect, detail,
             <NightChart detail={ detail } isCelsius={ isCelsius } now={ now }/>
             <Box>
               <Typography variant="overline" sx={ { color: 'text.secondary' } }>Why it changed</Typography>
-              { collapseWakeRamp(detail.decisions).map(({ decision, previous, finalF }) => (
+              { collapseRamps(detail.decisions).map(({ decision, previous, finalF }) => (
                 <DecisionRow key={ decision.id } decision={ decision } previous={ previous } finalF={ finalF } isCelsius={ isCelsius }/>
               )) }
             </Box>

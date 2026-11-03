@@ -3,14 +3,15 @@ import { z } from 'zod';
 import logger from '../../logger.js';
 import {
   AmbientReadingSchema,
+  ExternalRoomSchema,
   SessionDetail,
   SideBodySchema,
   SideParamSchema,
   StartSessionSchema,
 } from '../../autopilot/autopilotSchema.js';
 import { getAutopilotStatus } from '../../autopilot/controller.js';
-import { getSession, listAmbient, listDecisions, listSessions, upsertAmbient } from '../../autopilot/autopilotStore.js';
-import { AutopilotError, endSession, nowSeconds, resumeSession, startSession } from '../../autopilot/sessionManager.js';
+import { getSession, listAmbient, listDecisions, listSessions, upsertAmbient, upsertExternalRoom } from '../../autopilot/autopilotStore.js';
+import { AutopilotError, endSession, nowSeconds, prepareBed, resumeSession, startSession } from '../../autopilot/sessionManager.js';
 
 const router = express.Router();
 
@@ -68,6 +69,17 @@ router.post('/autopilot/session/resume', async (req: Request, res: Response, nex
   }
 });
 
+router.post('/autopilot/prepare', async (req: Request, res: Response, next: NextFunction) => {
+  const parsed = SideBodySchema.safeParse(req.body);
+  if (!parsed.success) return respondInvalid(res, parsed.error);
+  try {
+    await prepareBed(parsed.data.side);
+    res.status(204).end();
+  } catch (error) {
+    handleError(error, res, next);
+  }
+});
+
 const SessionsQuerySchema = z.object({
   side: SideParamSchema.optional(),
   limit: z.coerce.number().int().min(1).max(200).default(30),
@@ -110,6 +122,18 @@ router.post('/autopilot/ambient', async (req: Request, res: Response, next: Next
   }
   try {
     await upsertAmbient(parsed.data);
+    res.status(204).end();
+  } catch (error) {
+    handleError(error, res, next);
+  }
+});
+
+// Pushed by a trusted room sensor, e.g. a Home Assistant automation
+router.post('/autopilot/room', async (req: Request, res: Response, next: NextFunction) => {
+  const parsed = ExternalRoomSchema.safeParse(req.body);
+  if (!parsed.success) return respondInvalid(res, parsed.error);
+  try {
+    await upsertExternalRoom(parsed.data.temperatureC, nowSeconds());
     res.status(204).end();
   } catch (error) {
     handleError(error, res, next);

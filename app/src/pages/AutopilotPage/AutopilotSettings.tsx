@@ -1,10 +1,10 @@
 import { DeepPartial } from 'ts-essentials';
 import { Box, Divider, Switch, Typography } from '@mui/material';
-import { AUTOPILOT_STAGES, AutopilotSideSettings, Settings, SideSettings } from '@api/settingsSchema.ts';
+import { AutopilotSideSettings, Settings, SideSettings } from '@api/settingsSchema.ts';
 import type { Side } from '@state/appStore.tsx';
 import SettingToggle from '../SettingsPage/SettingToggle.tsx';
 import SettingsHint from '../SettingsPage/SettingsHint.tsx';
-import { formatOffset, formatTemp, STAGE_LABELS } from './autopilotFormat.ts';
+import { formatOffset, formatTemp } from './autopilotFormat.ts';
 import Stepper from './SettingStepper.tsx';
 
 type AutopilotSettingsProps = {
@@ -14,6 +14,10 @@ type AutopilotSettingsProps = {
   disabled: boolean;
   updateSettings: (settings: DeepPartial<Settings>) => void;
 };
+
+// Limits for the app's controls; the server enforces 60-100°F while someone is in bed
+const SOFT_MIN_F = 65;
+const SOFT_MAX_F = 95;
 
 const SLEEP_TAP = { type: 'sleepSession' } as const;
 const DEFAULT_TRIPLE_TAP = { type: 'temperature', change: 'increment', amount: 1 } as const;
@@ -53,40 +57,54 @@ export default function AutopilotSettings({ side, sideSettings, isCelsius, disab
       />
 
       <Divider/>
-      <Typography variant="overline" sx={ { color: 'text.secondary' } }>Stages</Typography>
+      <Typography variant="overline" sx={ { color: 'text.secondary' } }>Temperature curve</Typography>
+      <Stepper
+        label="Getting into bed"
+        hint="Held for 15 minutes, then a slow ramp down"
+        value={ formatTemp(autopilot.entryTemperatureF, isCelsius) }
+        canDecrement={ autopilot.entryTemperatureF > SOFT_MIN_F }
+        canIncrement={ autopilot.entryTemperatureF < SOFT_MAX_F }
+        disabled={ disabled }
+        onChange={ direction => update({ entryTemperatureF: autopilot.entryTemperatureF + direction }) }
+      />
       <Stepper
         label="Base temperature"
+        hint="Where the bed settles for the rest of the sleep"
         value={ formatTemp(autopilot.baseTemperatureF, isCelsius) }
-        canDecrement={ autopilot.baseTemperatureF > 55 }
-        canIncrement={ autopilot.baseTemperatureF < 110 }
+        canDecrement={ autopilot.baseTemperatureF > SOFT_MIN_F }
+        canIncrement={ autopilot.baseTemperatureF < SOFT_MAX_F }
         disabled={ disabled }
         onChange={ direction => update({ baseTemperatureF: autopilot.baseTemperatureF + direction }) }
       />
-      { AUTOPILOT_STAGES.map(stage => {
-        const offset = autopilot.stageOffsetsF[stage];
-        return (
-          <Stepper
-            key={ stage }
-            label={ STAGE_LABELS[stage] }
-            hint={ `${formatOffset(offset, isCelsius)} from base` }
-            value={ formatTemp(Math.min(110, Math.max(55, autopilot.baseTemperatureF + offset)), isCelsius) }
-            canDecrement={ offset > -20 }
-            canIncrement={ offset < 20 }
-            disabled={ disabled }
-            onChange={ direction => update({ stageOffsetsF: { [stage]: offset + direction } }) }
-          />
-        );
-      }) }
+      <Stepper
+        label="Early cooling"
+        hint="Below base for about the first 3 hours"
+        value={ formatOffset(-autopilot.earlyCoolF, isCelsius) }
+        canDecrement={ autopilot.earlyCoolF > 0 }
+        canIncrement={ autopilot.earlyCoolF < 10 }
+        disabled={ disabled }
+        onChange={ direction => update({ earlyCoolF: autopilot.earlyCoolF - direction }) }
+      />
+      <Stepper
+        label="Wake-up warm-up"
+        hint="Only with a wake time, comfort rather than alertness"
+        value={ formatOffset(autopilot.wakeRiseF, isCelsius) }
+        canDecrement={ autopilot.wakeRiseF > 0 }
+        canIncrement={ autopilot.wakeRiseF < 6 }
+        disabled={ disabled }
+        onChange={ direction => update({ wakeRiseF: autopilot.wakeRiseF + direction }) }
+      />
       <Stepper
         label="Nap"
         value={ formatTemp(autopilot.napTemperatureF, isCelsius) }
-        canDecrement={ autopilot.napTemperatureF > 55 }
-        canIncrement={ autopilot.napTemperatureF < 110 }
+        canDecrement={ autopilot.napTemperatureF > SOFT_MIN_F }
+        canIncrement={ autopilot.napTemperatureF < SOFT_MAX_F }
         disabled={ disabled }
         onChange={ direction => update({ napTemperatureF: autopilot.napTemperatureF + direction }) }
       />
       <SettingsHint>
-        Falling asleep: first 30 min. Deep sleep: until 3 h. REM: the rest of the night. Wake-up: the last 30 min before your wake time.
+        The bed follows a slow schedule rather than reacting to sleep stages, which can't be detected reliably.
+        Early cooling is limited to −2°F until there are 4 sessions to estimate your body clock, and when REM is likely early on.
       </SettingsHint>
 
       <Divider/>
@@ -101,7 +119,8 @@ export default function AutopilotSettings({ side, sideSettings, isCelsius, disab
           />
         }
       >
-        A room warmer than the reference cools the bed, a colder one warms it (1°F per °C, ignoring the first 1°C).
+        A room warmer than the reference cools the bed 1°F per °C. Below 18°C it warms a little. Off by default,
+        because the pod's room sensor reads unreliably while the pod runs.
       </SettingToggle>
       <Stepper
         label="Reference room temperature"

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import moment from 'moment-timezone';
 import { DeepPartial } from 'ts-essentials';
-import { Box, Typography } from '@mui/material';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import ShowChartOutlinedIcon from '@mui/icons-material/ShowChartOutlined';
 import PageContainer from '../PageContainer.tsx';
@@ -11,12 +10,12 @@ import ErrorBoundary from '@components/ErrorBoundary.tsx';
 import Section from '../SettingsPage/Section.tsx';
 import { useAppStore } from '@state/appStore.tsx';
 import { postSettings, useSettings } from '@api/settings.ts';
-import { AUTOPILOT_STAGES, Settings } from '@api/settingsSchema.ts';
+import { Settings } from '@api/settingsSchema.ts';
 import { useAutopilotSession, useAutopilotSessions, useAutopilotStatus } from '@api/autopilot.ts';
 import SessionCard from './SessionCard.tsx';
 import SessionHistory from './SessionHistory.tsx';
 import AutopilotSettings from './AutopilotSettings.tsx';
-import { COLD_COLOR, formatOffset, formatTemp, SHORT_STAGE_LABELS, WARM_COLOR } from './autopilotFormat.ts';
+import TemperaturePlan from './TemperaturePlan.tsx';
 
 export default function AutopilotPage() {
   const { side, isUpdating, setIsUpdating } = useAppStore();
@@ -60,34 +59,7 @@ export default function AutopilotPage() {
       </ErrorBoundary>
 
       { autopilot && (
-        <Box>
-          <Typography variant="overline" sx={ { color: 'text.secondary' } }>
-            Tonight's plan · base { formatTemp(autopilot.baseTemperatureF, isCelsius) }
-          </Typography>
-          <Box sx={ { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 1 } }>
-            { AUTOPILOT_STAGES.map(stage => {
-              const offset = autopilot.stageOffsetsF[stage];
-              const isCurrent = sideStatus?.session && !sideStatus.session.isNap && sideStatus.stage === stage;
-              return (
-                <Box
-                  key={ stage }
-                  sx={ {
-                    border: '1px solid', borderColor: isCurrent ? 'text.primary' : 'divider', borderRadius: 2,
-                    p: 1.25, display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0,
-                  } }
-                >
-                  <Typography variant="caption" sx={ { color: 'text.secondary' } }>{ SHORT_STAGE_LABELS[stage] }</Typography>
-                  <Typography sx={ { fontSize: 17, fontWeight: 600 } }>
-                    { formatTemp(Math.min(110, Math.max(55, autopilot.baseTemperatureF + offset)), isCelsius) }
-                  </Typography>
-                  <Typography variant="caption" sx={ { color: offset > 0 ? WARM_COLOR : COLD_COLOR } }>
-                    { formatOffset(offset, isCelsius) }
-                  </Typography>
-                </Box>
-              );
-            }) }
-          </Box>
-        </Box>
+        <TemperaturePlan autopilot={ autopilot } bodyClock={ sideStatus?.bodyClock } stage={ sideStatus?.stage } isCelsius={ isCelsius }/>
       ) }
 
       <ErrorBoundary componentName="Sleep sessions">

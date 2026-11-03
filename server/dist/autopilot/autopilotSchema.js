@@ -1,6 +1,6 @@
 // WARNING! - The app imports these types directly, keep them compatible with app/src/api/autopilot.ts
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="a985f459-42fe-5fd5-b938-43c683a256e8")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="65c463fa-b3ab-5fb1-ba8d-6a007e3e44bc")}catch(e){}}();
 import { z } from 'zod';
 export const SideParamSchema = z.enum(['left', 'right']);
 export const StartSessionSchema = z.object({
@@ -21,5 +21,9 @@ export const AmbientReadingSchema = z.object({
     leftBodyC: z.number().min(-20).max(70).nullable().optional(),
     rightBodyC: z.number().min(-20).max(70).nullable().optional(),
 }).strict();
+// Pushed by a trusted room sensor, preferred over the pod's own sensors
+export const ExternalRoomSchema = z.object({
+    temperatureC: z.number().min(-20).max(70),
+}).strict();
 //# sourceMappingURL=autopilotSchema.js.map
-//# debugId=a985f459-42fe-5fd5-b938-43c683a256e8
+//# debugId=65c463fa-b3ab-5fb1-ba8d-6a007e3e44bc

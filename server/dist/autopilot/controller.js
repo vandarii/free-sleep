@@ -1,13 +1,13 @@
 // Autopilot control loop. Runs on its own interval instead of node-schedule, because
 // jobScheduler cancels every scheduled job whenever settings change.
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="92e1d378-433c-523f-89d8-1d3a3925a32f")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="9bd1d96b-26d1-538d-880e-2aa756e896f9")}catch(e){}}();
 import logger from '../logger.js';
 import settingsDB from '../db/settings.js';
-import { getActiveSession, getLastDecision, getLastEndedSession, getLatestAmbient } from './autopilotStore.js';
+import { getActiveSession, getLastDecision, getLastEndedSession, getLatestAmbient, getLatestExternalRoomC } from './autopilotStore.js';
 import { getAbsentSince } from './presenceTracker.js';
-import { endActiveSession, getControllerState, nowSeconds, RESUME_WINDOW_SECONDS, runControllerStep, withSideLock, } from './sessionManager.js';
-import { AMBIENT_MAX_AGE_SECONDS, planTemperature, roomTemperatureC } from './stages.js';
+import { endActiveSession, getBodyClock, getControllerState, nowSeconds, RESUME_WINDOW_SECONDS, runControllerStep, withSideLock, } from './sessionManager.js';
+import { AMBIENT_MAX_AGE_SECONDS, resolveRoom } from './stages.js';
 const TICK_MS = 60_000;
 const SIDES = ['left', 'right'];
 let interval;
@@ -59,25 +59,26 @@ export const stopAutopilot = () => {
 };
 const getSideStatus = async (side, now) => {
     const settings = settingsDB.data[side].autopilot;
-    const [session, lastSession, ambient] = await Promise.all([
+    const [session, lastSession, ambient, externalRoomC] = await Promise.all([
         getActiveSession(side),
         getLastEndedSession(side),
         getLatestAmbient(AMBIENT_MAX_AGE_SECONDS, now),
+        getLatestExternalRoomC(AMBIENT_MAX_AGE_SECONDS, now),
     ]);
-    const roomC = roomTemperatureC(ambient, settings);
+    const { roomC, source: roomSource } = resolveRoom(ambient, externalRoomC, settings);
     const lastDecision = session ? await getLastDecision(session.id) : null;
-    const plan = session
-        ? planTemperature({ settings, startedAt: session.startedAt, now, wakeAt: session.wakeAt, isNap: session.isNap, roomC })
-        : null;
+    const bodyClock = await getBodyClock(side, session?.startedAt ?? now);
     const canResume = !session && lastSession?.endedAt != null && now - lastSession.endedAt <= RESUME_WINDOW_SECONDS;
     return {
         enabled: settings.enabled,
         dryRun: settings.dryRun,
         session,
-        stage: plan?.stage ?? null,
-        stageTargetF: plan?.stageTargetF ?? null,
+        stage: lastDecision?.stage ?? null,
+        stageTargetF: lastDecision?.targetF ?? null,
         setF: getControllerState(side).lastSetF ?? lastDecision?.setF ?? null,
+        bodyClock,
         roomC: roomC === null ? null : Math.round(roomC * 10) / 10,
+        roomSource,
         humidity: ambient?.humidity ?? null,
         absentSince: session ? getAbsentSince(side, now) : null,
         lastDecision,
@@ -92,4 +93,4 @@ export const getAutopilotStatus = async () => {
     return { left, right };
 };
 //# sourceMappingURL=controller.js.map
-//# debugId=92e1d378-433c-523f-89d8-1d3a3925a32f
+//# debugId=9bd1d96b-26d1-538d-880e-2aa756e896f9

@@ -25,12 +25,20 @@ export const AmbientReadingSchema = z.object({
   rightBodyC: z.number().min(-20).max(70).nullable().optional(),
 }).strict();
 
+// Pushed by a trusted room sensor, preferred over the pod's own sensors
+export const ExternalRoomSchema = z.object({
+  temperatureC: z.number().min(-20).max(70),
+}).strict();
+
 export type StartSessionBody = z.infer<typeof StartSessionSchema>;
 export type AmbientReading = z.infer<typeof AmbientReadingSchema>;
 
 export type SessionEndReason = 'manual' | 'tap' | 'api' | 'out_of_bed' | 'max_length';
 export type SessionSource = 'manual' | 'tap' | 'api';
-export type DecisionReason = 'stage' | 'room' | 'wake' | 'nap';
+// 'stage' only appears on sessions logged before the time-based curve
+export type DecisionReason = 'schedule' | 'stage' | 'room' | 'wake' | 'nap';
+// Stage names logged before the time-based curve
+export type LegacyStage = 'falling' | 'deep' | 'rem';
 
 export type SleepSession = {
   id: number;
@@ -49,7 +57,7 @@ export type AutopilotDecision = {
   id: number;
   sessionId: number;
   timestamp: number;
-  stage: AutopilotStage;
+  stage: AutopilotStage | LegacyStage;
   targetF: number;
   setF: number;
   reason: DecisionReason;
@@ -64,16 +72,28 @@ export type AmbientRecord = {
   humidity: number | null;
   leftBodyC: number | null;
   rightBodyC: number | null;
+  externalRoomC: number | null;
+};
+
+export type RoomSource = 'external' | 'pod';
+
+export type BodyClock = {
+  // Estimated hour of the core temperature minimum, null until there are enough sessions
+  temperatureMinimumHour: number | null;
+  sessionCount: number;
+  sessionsNeeded: number;
 };
 
 export type AutopilotSideStatus = {
   enabled: boolean;
   dryRun: boolean;
   session: SleepSession | null;
-  stage: AutopilotStage | null;
+  stage: AutopilotDecision['stage'] | null;
   stageTargetF: number | null;
   setF: number | null;
+  bodyClock: BodyClock;
   roomC: number | null;
+  roomSource: RoomSource | null;
   humidity: number | null;
   absentSince: number | null;
   lastDecision: AutopilotDecision | null;

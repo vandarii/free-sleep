@@ -89,6 +89,7 @@ model ambient {
   humidity      Float?
   left_body_c   Float?
   right_body_c  Float?
+  external_room_c Float? // Pushed by a trusted room sensor, e.g. from Home Assistant
 
   @@unique([timestamp])
   @@index([timestamp])

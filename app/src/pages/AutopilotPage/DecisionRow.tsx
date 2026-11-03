@@ -14,7 +14,8 @@ export default function DecisionRow({ decision, previous, finalF, isCelsius }: D
   const shownF = finalF ?? decision.setF;
   const delta = previous ? shownF - previous.setF : 0;
   const style = REASON_STYLES[decision.reason];
-  const label = decision.detail ?? (decision.reason === 'stage' ? STAGE_LABELS[decision.stage] : style.label);
+  const usesStageLabel = decision.reason === 'stage' || decision.reason === 'schedule';
+  const label = decision.detail ?? (usesStageLabel ? STAGE_LABELS[decision.stage] : style.label);
   const deltaColor = delta < 0 ? 'info.main' : delta > 0 ? 'warning.main' : 'text.primary';
   return (
     <Box sx={ { display: 'flex', alignItems: 'center', gap: 1.25, py: 1, borderBottom: '1px solid', borderColor: 'divider' } }>

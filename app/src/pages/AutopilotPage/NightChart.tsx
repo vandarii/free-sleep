@@ -48,7 +48,12 @@ export default function NightChart({ detail, isCelsius, now }: NightChartProps) 
     const maxValue = Math.ceil(Math.max(...values) + padding);
     // Vertical guides where the stage changed
     const stageChanges = decisions.filter((decision, index) => index > 0 && decision.stage !== decisions[index - 1].stage);
-    return { setPoints, targetPoints, minValue, maxValue, stageChanges };
+    // Ramps step one degree at a time, so only their first step gets a marker
+    const markers = decisions.filter((decision, index) => {
+      const isRampStep = decision.reason === 'wake' || decision.reason === 'schedule';
+      return index === 0 || !isRampStep || decision.stage !== decisions[index - 1].stage;
+    });
+    return { setPoints, targetPoints, minValue, maxValue, stageChanges, markers };
   }, [decisions, endTime, isCelsius]);
 
   if (decisions.length === 0) {
@@ -119,7 +124,7 @@ export default function NightChart({ detail, isCelsius, now }: NightChartProps) 
         <path d={ areaPath } fill={ theme.palette.info.main } fillOpacity={ 0.1 }/>
         <path d={ stepPath(chart.targetPoints, x, y) } fill="none" stroke={ mutedColor } strokeWidth={ 1.3 } strokeDasharray="4 4"/>
         <path d={ setPath } fill="none" stroke={ lineColor } strokeWidth={ 2 } strokeLinejoin="round"/>
-        { decisions.map(decision => (
+        { chart.markers.map(decision => (
           <g key={ decision.id }>
             <title>{ decisionTooltip(decision, isCelsius) }</title>
             <Marker decision={ decision } cx={ x(decision.timestamp) } cy={ y(toUnit(decision.setF)) }/>
@@ -128,12 +133,12 @@ export default function NightChart({ detail, isCelsius, now }: NightChartProps) 
       </svg>
       <Box sx={ { display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 1, fontSize: 12, color: 'text.secondary' } }>
         <Box component="span" sx={ { display: 'flex', alignItems: 'center', gap: 0.5 } }>
-          <Box component="span" sx={ { width: 14, borderTop: '1.5px dashed', borderColor: 'text.secondary' } }/>Stage target
+          <Box component="span" sx={ { width: 14, borderTop: '1.5px dashed', borderColor: 'text.secondary' } }/>Schedule
         </Box>
         <Box component="span" sx={ { display: 'flex', alignItems: 'center', gap: 0.5 } }>
           <Box component="span" sx={ { width: 14, borderTop: '2px solid', borderColor: 'text.primary' } }/>Set temperature
         </Box>
-        { Object.entries(REASON_STYLES).map(([reason, style]) => (
+        { Object.entries(REASON_STYLES).filter(([reason]) => reason !== 'stage').map(([reason, style]) => (
           <Box component="span" key={ reason } sx={ { display: 'flex', alignItems: 'center', gap: 0.5 } }>
             <svg width={ 12 } height={ 12 } aria-hidden="true">
               <Marker decision={ { reason } as AutopilotDecision } cx={ 6 } cy={ 6 }/>

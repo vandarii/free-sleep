@@ -5,7 +5,7 @@ import { Alert, Box, Button, Card, CardContent, Chip, IconButton, TextField, Typ
 import BedtimeOutlinedIcon from '@mui/icons-material/BedtimeOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import type { AutopilotSideStatus } from '@api/autopilot.ts';
-import { endSleepSession, resumeSleepSession, startSleepSession } from '@api/autopilot.ts';
+import { endSleepSession, prepareBed, resumeSleepSession, startSleepSession } from '@api/autopilot.ts';
 import type { SideSettings } from '@api/settingsSchema.ts';
 import type { Side } from '@state/appStore.tsx';
 import { formatClock, formatDuration, formatRoom, formatTemp, STAGE_LABELS } from './autopilotFormat.ts';
@@ -86,7 +86,7 @@ export default function SessionCard({ side, status, sideSettings, isCelsius, onC
             <BedtimeOutlinedIcon sx={ { fontSize: 32, color: 'info.main' } }/>
             <Typography variant="h5" component="h2">Ready when you are</Typography>
             <Typography variant="body2" sx={ { color: 'text.secondary', maxWidth: 420 } }>
-              Autopilot only controls this side during a sleep session. Start one when you go to bed.
+              Autopilot follows a slow temperature curve during a sleep session. Start one when you get into bed.
             </Typography>
           </Box>
 
@@ -130,6 +130,11 @@ export default function SessionCard({ side, status, sideSettings, isCelsius, onC
           <Button variant="outlined" disabled={ busy || !autopilot?.enabled } onClick={ () => start(true) }>
             Start nap
           </Button>
+          { autopilot?.enabled && !autopilot.dryRun && (
+            <Button variant="outlined" disabled={ busy } onClick={ () => run(() => prepareBed(side)) }>
+              Get bed ready
+            </Button>
+          ) }
           { error && <Alert severity="error">{ error }</Alert> }
         </CardContent>
       </Card>
@@ -140,6 +145,7 @@ export default function SessionCard({ side, status, sideSettings, isCelsius, onC
   const absentSince = status?.absentSince;
   const autoEndAt = absentSince && autopilot ? Math.max(absentSince, session.startedAt) + autopilot.autoEndAbsentMinutes * 60 : null;
   const lastDecision = status?.lastDecision;
+  const roomSourceLabel = status?.roomSource === 'external' ? 'room sensor' : 'pod sensor';
 
   return (
     <Card>
@@ -155,20 +161,20 @@ export default function SessionCard({ side, status, sideSettings, isCelsius, onC
         <Box sx={ { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 2 } }>
           <Box>
             <Typography variant="caption" sx={ { color: 'text.secondary' } }>
-              { session.isNap ? 'Nap' : `${STAGE_LABELS[status?.stage ?? 'falling']} (estimated)` }
+              { session.isNap ? 'Nap' : STAGE_LABELS[status?.stage ?? 'entry'] }
             </Typography>
             <Typography sx={ { fontSize: 44, fontWeight: 600, letterSpacing: '-0.04em', lineHeight: 1.1 } }>
               { formatTemp(status?.setF, isCelsius) }
             </Typography>
           </Box>
           <Box sx={ { textAlign: 'right' } }>
-            <Typography variant="caption" sx={ { color: 'text.secondary' } }>Stage target</Typography>
+            <Typography variant="caption" sx={ { color: 'text.secondary' } }>Scheduled</Typography>
             <Typography sx={ { color: 'info.main' } }>{ formatTemp(status?.stageTargetF, isCelsius) }</Typography>
           </Box>
         </Box>
 
         <Box sx={ { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 } }>
-          <Metric label="Room" value={ formatRoom(status?.roomC, isCelsius) } sub="pod sensor"/>
+          <Metric label="Room" value={ formatRoom(status?.roomC, isCelsius) } sub={ roomSourceLabel }/>
           <Metric label="Humidity" value={ status?.humidity != null ? `${Math.round(status.humidity)}%` : '—' } sub="cover sensor"/>
         </Box>
 
