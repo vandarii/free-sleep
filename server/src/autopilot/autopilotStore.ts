@@ -212,9 +212,13 @@ export const getLatestExternalRoomC = async (maxAgeSeconds: number, now: number)
   return record?.external_room_c ?? null;
 };
 
+// The newest row from the pod's own sensors; rows holding only an external reading don't count
 export const getLatestAmbient = async (maxAgeSeconds: number, now: number) => {
   const record = await prisma.ambient.findFirst({
-    where: { timestamp: { gte: now - maxAgeSeconds } },
+    where: {
+      timestamp: { gte: now - maxAgeSeconds },
+      OR: [{ hub_amb_c: { not: null } }, { cover_amb_c: { not: null } }],
+    },
     orderBy: { timestamp: 'desc' },
   });
   return record ? toAmbient(record) : null;

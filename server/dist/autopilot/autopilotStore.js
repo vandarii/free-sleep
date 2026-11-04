@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="70b9b7fd-46fa-5fba-93c4-cce87393e6aa")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="2e814846-4bf8-5861-9462-6956865d917c")}catch(e){}}();
 import { prisma } from '../db/prisma.js';
 // Ambient readings are stored in 5-minute buckets
 const AMBIENT_BUCKET_SECONDS = 300;
@@ -161,9 +161,13 @@ export const getLatestExternalRoomC = async (maxAgeSeconds, now) => {
     });
     return record?.external_room_c ?? null;
 };
+// The newest row from the pod's own sensors; rows holding only an external reading don't count
 export const getLatestAmbient = async (maxAgeSeconds, now) => {
     const record = await prisma.ambient.findFirst({
-        where: { timestamp: { gte: now - maxAgeSeconds } },
+        where: {
+            timestamp: { gte: now - maxAgeSeconds },
+            OR: [{ hub_amb_c: { not: null } }, { cover_amb_c: { not: null } }],
+        },
         orderBy: { timestamp: 'desc' },
     });
     return record ? toAmbient(record) : null;
@@ -176,4 +180,4 @@ export const listAmbient = async (startTime, endTime) => {
     return records.map(toAmbient);
 };
 //# sourceMappingURL=autopilotStore.js.map
-//# debugId=70b9b7fd-46fa-5fba-93c4-cce87393e6aa
+//# debugId=2e814846-4bf8-5861-9462-6956865d917c
